@@ -2,17 +2,38 @@ name: Deploy Medicine Prescription Analyzer
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:  # Allow manual triggering
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable debug mode'
+        required: false
+        default: 'false'
 
 env:
   AWS_REGION: us-east-1
   TERRAFORM_VERSION: 1.5.0
 
 jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Debug Info
+      run: |
+        echo "🔍 Workflow triggered successfully!"
+        echo "Branch: ${{ github.ref }}"
+        echo "Event: ${{ github.event_name }}"
+        echo "Repository: ${{ github.repository }}"
+        echo "Commit: ${{ github.sha }}"
+
   test:
+    needs: debug
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -23,9 +44,10 @@ jobs:
         node-version: '18'
     
     - name: Install dependencies
-      run: |
-        npm install
-        npm run build
+      run: npm ci
+    
+    - name: Build frontend
+      run: npm run build
     
     - name: Test Lambda function syntax
       run: |
@@ -136,7 +158,7 @@ jobs:
     
     - name: Build frontend
       run: npm run build
-       echo "✅ Frontend built successfully"
+      echo "✅ Frontend built successfully"
     
     - name: Deploy to S3
       run: |
