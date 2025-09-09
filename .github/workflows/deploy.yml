@@ -1,0 +1,132 @@
+name: Deploy Medicine Prescription Analyzer
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: 1.5.0
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build frontend
+      run: npm run build
+    
+    - name: Test Lambda function syntax
+      run: |
+        python3 -m py_compile lambda/prescription-analyzer.py
+
+  deploy-infrastructure:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+        terraform_wrapper: false
+    
+    - name: Prepare Lambda deployment package
+      run: |
+        cd lambda
+        zip -r ../terraform/prescription_analyzer.zip . -x "*.pyc" "__pycache__/*"
+    
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+    
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan -out=tfplan
+    
+    - name: Terraform Apply
+      run: |
+        cd terraform
+        terraform apply -auto-approve tfplan
+    
+    - name: Get Terraform Outputs
+      id: terraform-outputs
+      run: |
+        cd terraform
+        echo "api_url=$(terraform output -raw api_gateway_invoke_url)" >> $GITHUB_OUTPUT
+        echo "s3_bucket=$(terraform output -raw website_bucket_name)" >> $GITHUB_OUTPUT
+        echo "cloudfront_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
+    
+    outputs:
+      api_url: ${{ steps.terraform-outputs.outputs.api_url }}
+      s3_bucket: ${{ steps.terraform-outputs.outputs.s3_bucket }}
+      cloudfront_url: ${{ steps.terraform-outputs.outputs.cloudfront_url }}
+
+  deploy-frontend:
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Update API configuration
+      run: |
+        sed -i "s|https://your-api-gateway-url.amazonaws.com/prod/analyze|${{ needs.deploy-infrastructure.outputs.api_url }}/analyze|g" script.js
+    
+    - name: Build frontend
+      run: npm run build
+    
+    - name: Deploy to S3
+      run: |
+        aws s3 sync dist/ s3://${{ needs.deploy-infrastructure.outputs.s3_bucket }}/ --delete
+    
+    - name: Invalidate CloudFront
+      run: |
+        aws cloudfront create-invalidation --distribution-id $(aws cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[0].DomainName=='${{ needs.deploy-infrastructure.outputs.s3_bucket }}.s3.amazonaws.com'].Id" --output text) --paths "/*"
+    
+    - name: Display URLs
+      run: |
+        echo "🚀 Deployment completed!"
+        echo "📱 Frontend URL: ${{ needs.deploy-infrastructure.outputs.cloudfront_url }}"
+        echo "🔗 API URL: ${{ needs.deploy-infrastructure.outputs.api_url }}"

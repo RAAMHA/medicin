@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medicine Prescription Analyzer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏥 Medicine Prescription Analyzer</h1>
+            <p>Upload your prescription to get detailed medicine information</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📄</div>
+                    <h3>Drop your prescription here</h3>
+                    <p>or click to browse files</p>
+                    <input type="file" id="fileInput" accept="image/*,.pdf,.txt" hidden>
+                </div>
+                <button id="uploadBtn" class="btn-primary" disabled>Analyze Prescription</button>
+            </div>
+
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Analyzing your prescription...</p>
+            </div>
+
+            <div class="results" id="results" style="display: none;">
+                <h2>Medicine Information</h2>
+                <div id="medicineInfo"></div>
+            </div>
+
+            <div class="error" id="error" style="display: none;">
+                <h3>❌ Error</h3>
+                <p id="errorMessage"></p>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
