@@ -158,7 +158,7 @@ jobs:
     
     - name: Build frontend
       run: npm run build
-      echo "✅ Frontend built successfully"
+       echo "✅ Frontend built successfully"
     
     - name: Deploy to S3
       run: |
